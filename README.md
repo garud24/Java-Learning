@@ -54,6 +54,8 @@ void method() {
 
 When method() returns, x and the reference v disappear from the stack. If nothing else referenced the Vehicle object, it's now eligible for garbage collection.
 
+![Stack vs. Heap memory model](images/stack_vs_heap_memory_model.png)
+
 ## 3. Gotcha #2: Java Is Always Pass-by-Value
 
 Java has no pass-by-reference, ever. Full stop. What confuses people: when you pass an object, you're passing a copy of the reference (the address), not a copy of the object, and not the "real" reference either.
