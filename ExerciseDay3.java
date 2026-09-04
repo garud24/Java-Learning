@@ -15,6 +15,14 @@ time addBook is called across the whole Library class, not per
 instance. Create two separate Library objects, add books to each, 
 and prove whether the counter is shared or separate. Predict the 
 answer before running it.
+
+3. Add a constructor chain to Book: a full constructor Book(String title, Author author) 
+and an overload Book(String title) that chains to it using this(...) with 
+an Author object representing "Unknown".
+
+4. Write a main method that constructs 3 authors and 5 books distributed among them, 
+adds all 5 to one Library, then loops over library.books and prints each book's title 
+alongside its author's name. This proves the object graph is navigable end to end.
 */
 
 class Author
