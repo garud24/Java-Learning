@@ -169,3 +169,236 @@ When you design something like ParkingLot, every field that's a reference type (
 - **Overload resolution:** Write three overloaded `describe` methods: `describe(int x)`, `describe(double x)`, and `describe(String x)`. Call `describe(5)`, `describe(5.0)`, and `describe('c')` (a `char`), and predict which overload each call hits before running it. The `char` call is the trick question.
 
 Paste code when you want it checked, or say "goto Day 3" to keep moving.
+
+---
+
+## Day 3: Classes, Objects, Construction
+
+How objects (and objects of objects) actually get built.
+
+This is the day you specifically asked for. Let's go deep.
+
+### 1. What `new` Actually Does, Step by Step
+
+```java
+Vehicle v = new Vehicle("Honda", "Red");
+```
+
+When this line executes, in order:
+
+1. **Memory allocation:** The JVM allocates a block of memory on the heap sized to hold `Vehicle`'s fields.
+2. **Default initialization:** Every field gets its zero-value default first (`0` for numerics, `false` for `boolean`, `null` for references), before any of your code runs.
+3. **Instance initializer blocks and field initializers run**, in the order they appear in the source file.
+4. **The constructor body runs**, whichever one matches the arguments you passed.
+5. **The reference to the new object is returned** and assigned to `v`.
+
+That ordering (2 -> 3 -> 4) is guaranteed by the Java Language Specification. This matters because, by the time your constructor body starts executing, every field already has some value, even fields you have not touched yet.
+
+### 2. Constructors: What They Really Are
+
+A constructor is not a method that creates the object. Allocation already happened in step 1 above. A constructor's real job is to **initialize** the already-allocated object.
+
+```java
+class Vehicle {
+    String model;
+    String color;
+
+    Vehicle(String model, String color) {
+        this.model = model;
+        this.color = color;
+    }
+}
+```
+
+- No return type, not even `void`: constructors never return a value. This is how the compiler tells a constructor apart from a method that happens to share the class's name.
+- The constructor must match the class name exactly.
+- `this.model = model`: `this` disambiguates the field from the parameter, since they share a name. `this.model` means the field on the object being constructed; `model` means the parameter passed in.
+
+If you write no constructor at all, the compiler silently generates a default no-arg constructor for you: `Vehicle() {}`. The moment you write any constructor yourself, that free constructor disappears. If you still want a no-arg version, you must write it explicitly.
+
+### 3. Constructor Overloading and Chaining with `this(...)`
+
+You can have multiple constructors, just like overloaded methods:
+
+```java
+class Vehicle {
+    String model;
+    String color;
+
+    Vehicle(String model, String color) {
+        this.model = model;
+        this.color = color;
+    }
+
+    Vehicle(String model) {
+        this(model, "White");   // delegates to the other constructor; must be the first line
+    }
+
+    Vehicle() {
+        this("Unknown");        // chains to the constructor above
+    }
+}
+```
+
+`this(...)` calls another constructor in the same class. It must be the very first statement in the constructor body. This lets you have one real constructor that does the actual work, and thinner constructors that supply defaults and delegate.
+
+### 4. `this`: The Four Things It Actually Means
+
+`this` is a reference to the current object: the object this code is running on behalf of.
+
+```java
+class Point {
+    int x, y;
+
+    Point(int x, int y) {
+        this.x = x;          // (1) disambiguate field from parameter
+        this.y = y;
+    }
+
+    Point() {
+        this(0, 0);          // (2) call another constructor
+    }
+
+    Point shift(int dx) {
+        this.x += dx;
+        return this;         // (3) return the current object itself
+    }
+
+    void compareTo(Point other) {
+        if (this == other) { // (4) compare this exact object's identity
+            System.out.println("same object");
+        }
+    }
+}
+```
+
+`this` does not exist in `static` methods or static context because it means the current instance, and static code does not belong to any instance.
+
+### 5. Static vs. Instance Members: The Real Distinction
+
+- **Instance member** (a field or method without `static`): belongs to each object separately. Every `Vehicle` you create gets its own `model` and its own `color`.
+- **Static member:** belongs to the class itself and is shared across every instance. There is exactly one copy, no matter how many objects you create.
+
+```java
+class Vehicle {
+    static int totalVehiclesCreated = 0;  // one copy, shared by all Vehicles
+    String model;                         // separate copy per Vehicle
+
+    Vehicle(String model) {
+        this.model = model;
+        totalVehiclesCreated++;           // every constructor call bumps the same counter
+    }
+}
+```
+
+```java
+Vehicle v1 = new Vehicle("Civic");
+Vehicle v2 = new Vehicle("Corolla");
+System.out.println(Vehicle.totalVehiclesCreated); // 2
+```
+
+This is a common LLD pattern: a `static` counter or registry shared across all instances of a class, such as an auto-generated unique ID.
+
+### 6. Static Blocks vs. Instance Initializer Blocks
+
+```java
+class Vehicle {
+    static int registrySize;
+    String model;
+
+    static {
+        // Runs exactly once, when the class is first loaded by the JVM.
+        registrySize = 0;
+        System.out.println("Vehicle class loaded");
+    }
+
+    {
+        // Runs every time an object is created, before the constructor body.
+        System.out.println("New Vehicle object being built");
+    }
+
+    Vehicle(String model) {
+        this.model = model;
+        System.out.println("Constructor running");
+    }
+}
+```
+
+Full ordering when you run `new Vehicle("Civic")` for the first time in a program:
+
+1. **Class loading:** static field defaults, static field initializers, and static blocks, in source order.
+2. **Object construction:** instance field defaults, instance field initializers and instance initializer blocks, in source order, followed by the constructor body.
+
+Static blocks are rare in day-to-day code but are used for one-time setup, such as loading configuration. Instance initializer blocks are rarer still; most people put shared logic directly in the constructor. You still need to recognize the ordering when you see it.
+
+### 7. Composition: Objects of Objects
+
+A class field does not have to be a primitive or a `String`; it can be another object you defined:
+
+```java
+import java.util.ArrayList;
+import java.util.List;
+
+class Author {
+    String name;
+
+    Author(String name) {
+        this.name = name;
+    }
+}
+
+class Book {
+    String title;
+    Author author;          // Book HAS-A Author: composition
+
+    Book(String title, Author author) {
+        this.title = title;
+        this.author = author;
+    }
+}
+
+class Library {
+    List<Book> books;       // Library HAS-A list of Books
+
+    Library() {
+        books = new ArrayList<>();
+    }
+
+    void addBook(Book book) {
+        books.add(book);
+    }
+}
+```
+
+Building the object graph:
+
+```java
+Author author = new Author("Robert Martin");
+Book book = new Book("Clean Code", author);
+Library library = new Library();
+library.addBook(book);
+```
+
+Trace exactly what happens on the heap:
+
+1. `new Author("Robert Martin")`: an `Author` object is allocated, its `name` field is set, and a reference to it is stored in the local variable `author`.
+2. `new Book("Clean Code", author)`: a `Book` object is allocated. Its `title` is set directly, and its `author` field is set to the same reference held by `author`. The `Book` does not get its own copy of the `Author` object.
+3. `new Library()`: a `Library` object is allocated. Its constructor creates an empty `ArrayList` and stores a reference to that list in `books`.
+4. `library.addBook(book)`: the `ArrayList` inside `library` now holds a reference to the same `Book` object.
+
+You end up with a chain of references: `library -> ArrayList -> Book -> Author`. Nothing was copied. Every object is singular, and multiple things can hold references to the same one. This is the Day 2 stack/heap model one level deeper: the heap object `Book` holds a reference field pointing to another heap object, `Author`.
+
+![Detailed stack, heap, and object graph](images/detailed_stack_heap_object_graph.png)
+
+If two different `Book` objects are constructed with the same `author` reference, mutating that shared `Author`'s name is visible through both books because there is only one `Author` object, referenced from two places.
+
+---
+
+### Practice: Do This Now
+
+Build the `Library` -> `Book` -> `Author` example above, then extend it:
+
+1. Add a `List<Book> books` to `Author` too, representing the books an author has written. Do not create a two-way link back from `Book` to the list on `Author` unless you also add the `Book` to it explicitly. Adding a `Book` to a `Library` does not automatically add it to the `Author`'s list; these are separate object graphs unless you write code to keep them in sync.
+2. Add a static field `Library.totalBooksAdded` that increments every time `addBook` is called across the whole `Library` class, not per instance. Create two separate `Library` objects, add books to each, and prove whether the counter is shared or separate. Predict the answer before running it.
+3. Add a constructor chain to `Book`: a full constructor `Book(String title, Author author)` and an overload `Book(String title)` that chains to it using `this(...)` with an `Author` object representing `"Unknown"`.
+4. Write a `main` method that constructs 3 authors and 5 books distributed among them, adds all 5 to one `Library`, then loops over `library.books` and prints each book's title alongside its author's name. This proves the object graph is navigable end to end.
