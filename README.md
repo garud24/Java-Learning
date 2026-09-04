@@ -402,3 +402,185 @@ Build the `Library` -> `Book` -> `Author` example above, then extend it:
 2. Add a static field `Library.totalBooksAdded` that increments every time `addBook` is called across the whole `Library` class, not per instance. Create two separate `Library` objects, add books to each, and prove whether the counter is shared or separate. Predict the answer before running it.
 3. Add a constructor chain to `Book`: a full constructor `Book(String title, Author author)` and an overload `Book(String title)` that chains to it using `this(...)` with an `Author` object representing `"Unknown"`.
 4. Write a `main` method that constructs 3 authors and 5 books distributed among them, adds all 5 to one `Library`, then loops over `library.books` and prints each book's title alongside its author's name. This proves the object graph is navigable end to end.
+
+---
+
+## Day 4: Encapsulation - Access Control, Immutability, and Defensive Copying
+
+### 1. Why Encapsulation Is More Than "Make Fields Private"
+
+The textbook definition, "hide internal state, expose behavior," undersells what is actually at stake. The real goal is that **an object should be able to guarantee its own invariants**. If a `BankAccount`'s balance can never legally go negative, encapsulation means there is no possible sequence of calls from outside the class that can produce a negative balance. This is true not because callers are well-behaved, but because the class makes it structurally impossible.
+
+```java
+class BankAccount {
+    private double balance;   // no outside code can touch this directly
+
+    BankAccount(double initialBalance) {
+        if (initialBalance < 0) {
+            throw new IllegalArgumentException("Cannot open with negative balance");
+        }
+        this.balance = initialBalance;
+    }
+
+    void withdraw(double amount) {
+        if (amount > balance) {
+            throw new IllegalStateException("Insufficient funds");
+        }
+        balance -= amount;
+    }
+
+    double getBalance() {
+        return balance;
+    }
+}
+```
+
+If `balance` were public, any code could do `account.balance = -500;` directly, bypassing every rule the class tries to enforce. Private fields are not about secrecy; they **force every mutation through a method that can validate it**.
+
+### 2. Getters and Setters: A Design Decision
+
+Coming from Python, you might reach for "make everything private, then add a getter and setter for every field" as a reflex. Resist that. A setter that only does `this.x = x;` with no validation provides zero benefit over a public field; it is the same lack of protection with more boilerplate.
+
+Ask, for every field: Does this need a getter? Does it need a setter? Does the setter need to validate anything?
+
+```java
+class Employee {
+    private String name;
+    private double salary;
+
+    Employee(String name, double salary) {
+        this.name = name;
+        setSalary(salary);   // route construction through the validating setter
+    }
+
+    String getName() {
+        return name;
+    }
+
+    double getSalary() {
+        return salary;
+    }
+
+    void setSalary(double salary) {
+        if (salary < 0) {
+            throw new IllegalArgumentException("Salary cannot be negative");
+        }
+        this.salary = salary;
+    }
+}
+```
+
+The constructor calls `setSalary(salary)` instead of assigning `this.salary` directly. The validation logic exists in exactly one place, so construction and later mutation follow the same rule.
+
+### 3. Immutability: Objects That Cannot Change After Construction
+
+An immutable object's state is fixed forever once constructed. This eliminates unexpected mutation and makes objects safe to share without defensive copying at every handoff.
+
+Recipe for a truly immutable class:
+
+```java
+final class Point {                      // (1) cannot be subclassed
+    private final int x;                 // (2) private and final
+    private final int y;
+
+    Point(int x, int y) {
+        this.x = x;
+        this.y = y;
+    }
+
+    int getX() { return x; }             // (3) getters only
+    int getY() { return y; }
+
+    Point translate(int dx, int dy) {    // (4) return a new object
+        return new Point(this.x + dx, this.y + dy);
+    }
+}
+```
+
+Using it:
+
+```java
+Point p1 = new Point(0, 0);
+Point p2 = p1.translate(5, 5);   // p1 is untouched; p2 is new
+System.out.println(p1.getX());   // still 0
+System.out.println(p2.getX());   // 5
+```
+
+This is precisely how `String` behaves. `.concat()` does not mutate the original string; it returns a new `String`. The same pattern appears in `Integer`, `Double`, `LocalDate`, and `BigDecimal`.
+
+### 4. The Gotcha: Mutable Fields Inside "Immutable" Classes
+
+```java
+final class Team {
+    private final String name;
+    private final List<String> members;
+
+    Team(String name, List<String> members) {
+        this.name = name;
+        this.members = members;   // stores the caller's list reference
+    }
+
+    List<String> getMembers() {
+        return members;           // returns the internal list reference
+    }
+}
+```
+
+This class looks immutable, but it is not:
+
+```java
+List<String> list = new ArrayList<>();
+list.add("Alice");
+Team team = new Team("Alpha", list);
+
+list.add("Bob");                        // changes the Team's internal list
+System.out.println(team.getMembers());  // [Alice, Bob]
+
+team.getMembers().add("Eve");           // direct mutation through the getter
+```
+
+Both bugs happen because `members` is a reference type. Assigning `this.members = members` does not copy the list; it stores the same reference the caller has. The fix is **defensive copying** on the way in and on the way out:
+
+```java
+final class Team {
+    private final String name;
+    private final List<String> members;
+
+    Team(String name, List<String> members) {
+        this.name = name;
+        this.members = new ArrayList<>(members);   // copy on the way in
+    }
+
+    List<String> getMembers() {
+        return new ArrayList<>(members);            // copy on the way out
+    }
+}
+```
+
+Now the caller's original list and the `Team`'s internal list are two separate `ArrayList` objects. Mutating one has no effect on the other. Final fields alone are not sufficient when a field refers to something mutable.
+
+### 5. Packages: Organizing Classes into Namespaces
+
+```java
+package com.example.parkinglot;
+
+public class Vehicle {
+    // ...
+}
+```
+
+- The package declaration must be the first line in the file; only comments can precede it.
+- The directory structure must mirror the package name: `com.example.parkinglot` lives in `com/example/parkinglot/Vehicle.java`.
+- To use a class from another package, write `import com.example.parkinglot.Vehicle;`.
+- Classes in the same package can see each other's package-private members; classes in different packages cannot.
+
+For now, single-file exercises in VS Code do not need packages. Real LLD projects will be organized into packages such as `parkinglot.model` and `parkinglot.strategy`, so get comfortable with the syntax now.
+
+---
+
+### Practice: Do These Now
+
+1. **`BankAccount` with real invariant enforcement:** Create a private `balance` field. Reject negative initial balances, and make `deposit(amount)` reject negative or zero amounts. Make `withdraw(amount)` reject amounts that exceed the balance or are negative or zero. Do not create a public setter for `balance`; change it only through `deposit` and `withdraw`.
+2. **Immutable `Money` class:** Create a `final` class with private final `int amountInCents` and `String currency` fields, getters, and an `add(Money other)` method that returns a new `Money` object. Throw an exception if the currencies do not match.
+3. **Defensive copying bug, then fix:** Write a `Roster` class that takes a `List<String>` in its constructor and stores it without copying. Prove the bug by mutating the original list from outside and showing that the `Roster`'s internal state changes. Then fix `Roster` with defensive copies in the constructor and getter, and prove the bug is gone.
+4. **Getter/setter judgment call:** Design a `Temperature` class that stores Celsius internally but exposes `getCelsius()` and a computed `getFahrenheit()`. Do not add a setter; set values only at construction. Compute Fahrenheit on demand instead of storing a second field, because duplicated state can go out of sync.
