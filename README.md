@@ -576,7 +576,109 @@ public class Vehicle {
 
 For now, single-file exercises in VS Code do not need packages. Real LLD projects will be organized into packages such as `parkinglot.model` and `parkinglot.strategy`, so get comfortable with the syntax now.
 
+#### Java Packages & Folder Structure - Quick Reference
+
+##### The Core Idea
+
+A **package is a folder**, not a file. It's a namespace that groups related classes together. Every `.java` file inside that folder declares itself as belonging to that package with a `package` statement as the very first line of the file (only comments may come before it).
+
+**A package is never one file.** It typically holds many files — every class that logically belongs to that grouping.
+
 ---
+
+##### Example: Real Folder Layout for a Parking Lot LLD Project
+
+```
+parkinglot/
+├── model/
+│   ├── Vehicle.java
+│   ├── ParkingSpot.java
+│   ├── VehicleType.java
+├── strategy/
+│   ├── SlotAssignmentStrategy.java
+│   ├── NearestSlotStrategy.java
+├── ParkingLot.java
+```
+
+- `model/` and `strategy/` are **directories on disk**.
+- `parkinglot.model` and `parkinglot.strategy` are the **package names** — they must exactly mirror the folder path. Java enforces this: if a file's `package` declaration says `parkinglot.model`, that file _must_ physically live inside a `parkinglot/model/` directory, or compilation fails.
+- `Vehicle.java`, `ParkingSpot.java`, and `VehicleType.java` all live in the same folder, so they all declare the same package: `package parkinglot.model;`
+
+```java
+// parkinglot/model/Vehicle.java
+package parkinglot.model;
+
+public class Vehicle {
+    // ...
+}
+```
+
+```java
+// parkinglot/model/ParkingSpot.java
+package parkinglot.model;   // SAME package as Vehicle — same folder, same namespace
+
+public class ParkingSpot {
+    // ...
+}
+```
+
+Because `Vehicle` and `ParkingSpot` share a package, they can reference each other directly — no `import` needed between classes in the _same_ package. They can also see each other's **package-private** members (fields/methods with no access modifier — see the access modifier table below).
+
+---
+
+##### Crossing Package Boundaries: When You Need `import`
+
+Any time a class in one package wants to use a `public` class from a **different** package, it needs an explicit `import`:
+
+```java
+// parkinglot/strategy/NearestSlotStrategy.java
+package parkinglot.strategy;
+
+import parkinglot.model.ParkingSpot;   // REQUIRED — ParkingSpot lives in a different package
+import parkinglot.model.Vehicle;       // REQUIRED — same reason
+
+public class NearestSlotStrategy {
+    public ParkingSpot findSpot(Vehicle vehicle) {
+        // ...
+    }
+}
+```
+
+Rules for what's importable:
+
+- Only `public` classes/interfaces can be imported and used from outside their own package. A package-private class is invisible outside its folder, `import` or not.
+- You import a specific class (`import parkinglot.model.Vehicle;`) or, less precisely, an entire package's public classes with a wildcard (`import parkinglot.model.*;`) — most style guides (and most IDEs by default) prefer explicit single-class imports over wildcards, since it makes it obvious at a glance exactly what a file depends on.
+
+---
+
+##### Access Modifier Recap
+
+| Modifier                           | Same class | Same package | Subclass (different package) | Everywhere |
+| ---------------------------------- | ---------- | ------------ | ---------------------------- | ---------- |
+| `private`                          | ✅         | ❌           | ❌                           | ❌         |
+| _(none — default/package-private)_ | ✅         | ✅           | ❌                           | ❌         |
+| `protected`                        | ✅         | ✅           | ✅                           | ❌         |
+| `public`                           | ✅         | ✅           | ✅                           | ✅         |
+
+This table is the entire reason packages matter beyond "just organizing files": package-private is a real, deliberate access level that only makes sense once you have multiple classes genuinely grouped together in one folder.
+
+---
+
+##### When This Does Not Matter Yet
+
+For quick single-file practice exercises (the kind used early in this course — `BankAccount`, `Money`, small drills), skip all of this entirely:
+
+- No `package` declaration.
+- No folder structure.
+- No imports beyond standard library collections (`import java.util.*;` as needed).
+
+Packages become relevant starting with the first real multi-class LLD project (Parking Lot, Day 14 onward), where separating `model` classes from `strategy` classes from the orchestrating class is itself part of demonstrating clean design — a flat pile of unrelated classes in one file or one folder is a design smell in a real LLD interview.
+
+---
+
+##### One-Line Mental Model
+
+## **Package name = folder path, dots become slashes.** `parkinglot.strategy` → `parkinglot/strategy/`. Every file physically inside that folder declares that same package name as its first line. Classes in the same package see each other for free; classes in different packages need an explicit `import` of anything `public`.
 
 ### Practice: Do These Now
 
